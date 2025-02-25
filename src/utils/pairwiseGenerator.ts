@@ -1,177 +1,130 @@
-import { Parameter, TestCase, PairwiseCombination } from '../types/types';
+import { Parameter, TestCase } from '../types/types';
 
 export function generatePairwiseCombinations(parameters: Parameter[]): TestCase[] {
-  // Helper function to create a pair key
-  const getPairKey = (param1: string, value1: string, param2: string, value2: string) => 
-    `${param1}:${value1}-${param2}:${value2}`;
+  if (parameters.length < 2) {
+    return [];
+  }
 
-  // Calculate minimum required test cases based on two parameters with most values
-  const getMinimumTestCases = (params: Parameter[]): number => {
-    const sortedValueCounts = params
-      .map(p => p.values.length)
-      .sort((a, b) => b - a);
-    return sortedValueCounts[0] * sortedValueCounts[1];
+  // Helper function to check if a pair exists in test cases
+  const hasPair = (testCases: TestCase[], param1: string, value1: string, param2: string, value2: string): boolean => {
+    return testCases.some(tc => 
+      tc[param1] === value1 && 
+      tc[param2] === value2 && 
+      tc[param1] !== undefined && 
+      tc[param2] !== undefined
+    );
   };
 
-  // Generate all possible pairs that need to be covered
-  const allPairs: PairwiseCombination[] = [];
-  const pairKeys = new Set<string>();
-  
+  // Helper function to get uncovered pairs
+  const getUncoveredPairs = (
+    testCases: TestCase[],
+    param1: Parameter,
+    param2: Parameter
+  ): Array<[string, string, string, string]> => {
+    const uncovered: Array<[string, string, string, string]> = [];
+    
+    param1.values.forEach(value1 => {
+      param2.values.forEach(value2 => {
+        if (!hasPair(testCases, param1.name, value1, param2.name, value2)) {
+          uncovered.push([param1.name, value1, param2.name, value2]);
+        }
+      });
+    });
+    
+    return uncovered;
+  };
+
+  // Get all pairs that need to be covered
+  let allPairs: Array<[string, string, string, string]> = [];
   for (let i = 0; i < parameters.length - 1; i++) {
     for (let j = i + 1; j < parameters.length; j++) {
-      const param1 = parameters[i];
-      const param2 = parameters[j];
-      
-      param1.values.forEach(value1 => {
-        param2.values.forEach(value2 => {
-          const pair = {
-            param1: param1.name,
-            value1,
-            param2: param2.name,
-            value2
-          };
-          allPairs.push(pair);
-          pairKeys.add(getPairKey(param1.name, value1, param2.name, value2));
-        });
-      });
+      allPairs = allPairs.concat(getUncoveredPairs([], parameters[i], parameters[j]));
     }
   }
 
   const testCases: TestCase[] = [];
-  const coveredPairs = new Set<string>();
 
-  // Helper function to count how many new pairs a test case would cover
-  const countNewPairsCovered = (testCase: TestCase): number => {
-    let count = 0;
-    for (let i = 0; i < parameters.length - 1; i++) {
-      for (let j = i + 1; j < parameters.length; j++) {
-        const param1 = parameters[i].name;
-        const param2 = parameters[j].name;
-        const value1 = testCase[param1];
-        const value2 = testCase[param2];
-        
-        const pairKey = getPairKey(param1, value1, param2, value2);
-        if (pairKeys.has(pairKey) && !coveredPairs.has(pairKey)) {
-          count++;
-        }
-      }
-    }
-    return count;
+  // Helper function to count how many uncovered pairs a test case would cover
+  const countCoveredPairs = (testCase: TestCase, remainingPairs: Array<[string, string, string, string]>): number => {
+    return remainingPairs.filter(([p1, v1, p2, v2]) => 
+      (testCase[p1] === v1 && testCase[p2] === v2) ||
+      (testCase[p2] === v2 && testCase[p1] === v1)
+    ).length;
   };
 
-  // Helper function to mark pairs in a test case as covered
-  const markPairsCovered = (testCase: TestCase) => {
-    for (let i = 0; i < parameters.length - 1; i++) {
-      for (let j = i + 1; j < parameters.length; j++) {
-        const param1 = parameters[i].name;
-        const param2 = parameters[j].name;
-        const value1 = testCase[param1];
-        const value2 = testCase[param2];
-        
-        const pairKey = getPairKey(param1, value1, param2, value2);
-        if (pairKeys.has(pairKey)) {
-          coveredPairs.add(pairKey);
-        }
-      }
-    }
-  };
+  // Helper function to create a test case that covers a specific pair
+  const createTestCase = (
+    param1: string,
+    value1: string,
+    param2: string,
+    value2: string,
+    remainingPairs: Array<[string, string, string, string]>
+  ): TestCase => {
+    const testCase: TestCase = {
+      [param1]: value1,
+      [param2]: value2
+    };
 
-  // Helper function to generate a candidate test case
-  const generateCandidate = (): TestCase => {
-    const candidate: TestCase = {};
-    
-    // Try to use values that would cover uncovered pairs more often
+    // Fill in other parameters with values that might cover more pairs
     parameters.forEach(param => {
-      const uncoveredCounts = new Map<string, number>();
-      
-      // Count how many uncovered pairs each value could potentially cover
-      param.values.forEach(value => {
-        let count = 0;
-        parameters.forEach(otherParam => {
-          if (otherParam.name !== param.name) {
-            otherParam.values.forEach(otherValue => {
-              const key1 = getPairKey(param.name, value, otherParam.name, otherValue);
-              const key2 = getPairKey(otherParam.name, otherValue, param.name, value);
-              if (!coveredPairs.has(key1) && !coveredPairs.has(key2)) {
-                count++;
-              }
-            });
+      if (param.name !== param1 && param.name !== param2 && !testCase[param.name]) {
+        let bestValue = param.values[0];
+        let maxCovered = -1;
+
+        param.values.forEach(value => {
+          const candidateCase = { ...testCase, [param.name]: value };
+          const covered = countCoveredPairs(candidateCase, remainingPairs);
+          if (covered > maxCovered) {
+            maxCovered = covered;
+            bestValue = value;
           }
         });
-        uncoveredCounts.set(value, count);
-      });
 
-      // Select value with probability proportional to uncovered pair count
-      const totalUncovered = Array.from(uncoveredCounts.values()).reduce((a, b) => a + b, 0);
-      if (totalUncovered > 0) {
-        let random = Math.random() * totalUncovered;
-        for (const [value, count] of uncoveredCounts.entries()) {
-          random -= count;
-          if (random <= 0) {
-            candidate[param.name] = value;
-            break;
-          }
-        }
-      }
-      
-      // If no uncovered pairs, choose randomly
-      if (!candidate[param.name]) {
-        candidate[param.name] = param.values[Math.floor(Math.random() * param.values.length)];
+        testCase[param.name] = bestValue;
       }
     });
-    
-    return candidate;
+
+    return testCase;
   };
 
-  const minimumTestCases = getMinimumTestCases(parameters);
-  const maxAttempts = minimumTestCases * 10; // Safety factor
-  let attempts = 0;
-
-  // Generate test cases until all pairs are covered or we hit the maximum attempts
-  while (coveredPairs.size < pairKeys.size && attempts < maxAttempts) {
+  // Create test cases until all pairs are covered
+  while (allPairs.length > 0) {
     let bestTestCase: TestCase | null = null;
-    let maxNewPairsCovered = 0;
+    let maxCovered = -1;
 
-    // Try multiple candidates and pick the best one
-    for (let i = 0; i < 50; i++) {
-      const candidate = generateCandidate();
-      const newPairsCovered = countNewPairsCovered(candidate);
-      
-      if (newPairsCovered > maxNewPairsCovered) {
-        maxNewPairsCovered = newPairsCovered;
+    // Try creating a test case for each remaining pair
+    for (const [p1, v1, p2, v2] of allPairs) {
+      const candidate = createTestCase(p1, v1, p2, v2, allPairs);
+      const covered = countCoveredPairs(candidate, allPairs);
+
+      if (covered > maxCovered) {
+        maxCovered = covered;
         bestTestCase = candidate;
       }
     }
 
-    if (bestTestCase && maxNewPairsCovered > 0) {
+    if (bestTestCase) {
       testCases.push(bestTestCase);
-      markPairsCovered(bestTestCase);
-    }
-
-    attempts++;
-
-    // Early success check
-    if (coveredPairs.size === pairKeys.size) {
+      
+      // Remove covered pairs
+      allPairs = allPairs.filter(([p1, v1, p2, v2]) => 
+        !hasPair([bestTestCase], p1, v1, p2, v2) &&
+        !hasPair([bestTestCase], p2, v2, p1, v1)
+      );
+    } else {
+      // Shouldn't happen, but break to avoid infinite loop
       break;
     }
+  }
 
-    // If we've generated more than minimum required cases and still haven't covered all pairs,
-    // check if we're making progress
-    if (testCases.length >= minimumTestCases && attempts % 100 === 0) {
-      const coveragePercentage = (coveredPairs.size / pairKeys.size) * 100;
-      if (coveragePercentage < 95) {
-        // If coverage is too low after minimum cases, restart with fresh attempt
-        testCases.length = 0;
-        coveredPairs.clear();
-        attempts = 0;
+  // Ensure all parameters have values in all test cases
+  testCases.forEach(testCase => {
+    parameters.forEach(param => {
+      if (!testCase[param.name]) {
+        testCase[param.name] = param.values[0];
       }
-    }
-  }
-
-  // Verify coverage
-  if (coveredPairs.size < pairKeys.size) {
-    console.warn(`Warning: Could not achieve full pair coverage. Covered ${coveredPairs.size} out of ${pairKeys.size} pairs.`);
-  }
+    });
+  });
 
   return testCases;
 }
