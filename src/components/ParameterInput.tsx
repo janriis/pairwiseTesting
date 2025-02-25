@@ -153,6 +153,7 @@ export default function ParameterInput({ parameter, onUpdate, onDelete }: Parame
             aria-label="Clear all values"
             title="Clear all values"
             type="button"
+            tabIndex={-1}
           >
             <Eraser size={20} />
           </button>
@@ -162,6 +163,7 @@ export default function ParameterInput({ parameter, onUpdate, onDelete }: Parame
             aria-label="Delete parameter"
             title="Delete parameter"
             type="button"
+            tabIndex={-1}
           >
             <X size={20} />
           </button>
@@ -186,16 +188,6 @@ export default function ParameterInput({ parameter, onUpdate, onDelete }: Parame
               className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
               data-parameter={parameter.name}
             />
-            {/* Clear Value Button */}
-            <button
-              onClick={() => clearValue(index)}
-              className="p-2 text-gray-500 dark:text-gray-400 hover:text-yellow-500 dark:hover:text-yellow-400 transition-colors"
-              title="Clear value"
-              type="button"
-            >
-              <Eraser size={16} />
-            </button>
-            {/* Add New Value Button (only shown on last field) */}
             {index === parameter.values.length - 1 && (
               <button
                 onClick={addNewValue}
@@ -206,6 +198,15 @@ export default function ParameterInput({ parameter, onUpdate, onDelete }: Parame
                 <Plus size={20} />
               </button>
             )}
+            <button
+              onClick={() => clearValue(index)}
+              className="p-2 text-gray-500 dark:text-gray-400 hover:text-yellow-500 dark:hover:text-yellow-400 transition-colors"
+              title="Clear value"
+              type="button"
+              tabIndex={-1}
+            >
+              <Eraser size={16} />
+            </button>
           </div>
         ))}
       </div>
